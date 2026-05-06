@@ -17,8 +17,8 @@ library(ISLR)
 ### Data setup
 ```{r}
 auto = read_csv("auto.csv")
-auto <- na.omit(auto)
-
+auto <- na.omit(auto) %>% 
+  filter(cylinders >= 4 & cylinders <= 8)
 auto$origin <- as.factor(auto$origin)
 auto$mpg_cat <- as.factor(auto$mpg_cat)
 
@@ -57,8 +57,8 @@ cat("SVC Training Error:", train_err_lin, "\n")
 cat("SVC Test Error:", test_err_lin, "\n")
 ```
 
-Training Error = 0.0912
-Test Error = 0.0508
+Training Error = 0.0664
+Test Error = 0.0855
 
 ---
 
@@ -93,53 +93,55 @@ cat("SVM Training Error:", train_err_rad, "\n")
 cat("SVM Test Error:", test_err_rad, "\n")
 ```
 
-Training Error = 0.0912
-Test Error = 0.0508
+Training Error = 0.059
+Test Error = 0.0684
 
 ---
 
 ### 1-c. Boosting & Comparison with SVC and SVM
 
 ```{r}
-ctrl <- trainControl(method = "cv")
-
-# SVC (Linear Kernel)
-set.seed(2) 
-svml.fit <- train(mpg_cat ~ ., 
-                  data = training_data, 
-                  method = "svmLinear2", 
-                  tuneGrid = data.frame(cost = linear.tune$best.parameters$cost), 
-                  trControl = ctrl) 
-
-# SVM (Radial Kernel)
-set.seed(2)
-svmr.fit <- train(mpg_cat ~ ., 
-                  data = training_data, 
-                  method = "svmRadial", 
-                  tuneGrid = data.frame(C = radial.tune$best.parameters$cost,
-                                        sigma = radial.tune$best.parameters$gamma),
-                  trControl = ctrl) 
+ctrl <- trainControl(method = "cv", classProbs = TRUE, summaryFunction = twoClassSummary)
 
 # Boosting
+gbmA.grid <- expand.grid(n.trees = c(100,200,500,1000,2000,5000,10000),
+            interaction.depth = 1:5,
+            shrinkage = c(0.005,0.007,0.009),
+            n.minobsinnode = c(10))
+
 set.seed(2)
 boost.fit <- train(mpg_cat ~ ., 
-                   data = training_data, 
-                   method = "gbm", 
+                   training_data,
+                   tuneGrid = gbmA.grid,
                    trControl = ctrl, 
-                   verbose = FALSE) 
+                   method = "gbm",
+                   distribution = "adaboost",
+                   metric = "ROC",
+                   verbose = FALSE)
 
-# Comparison
-resamp <- resamples(list(SVC = svml.fit, 
-                         SVM_radial = svmr.fit,
-                         Boosting = boost.fit))
+ggplot(boost.fit, highlight = TRUE)
 
-summary(resamp)
-bwplot(resamp)
+# Training Error Rate
+pred.gbm.train <- predict(boost.fit, newdata = training_data)
+train.error.gbm <- mean(pred.gbm.train != training_data$mpg_cat)
+
+# Test Error Rate
+pred.gbm.test <- predict(boost.fit, newdata = testing_data)
+test.error.gbm <- mean(pred.gbm.test != testing_data$mpg_cat)
+
+# Results
+cat("Boosting Training Error:", train.error.gbm, "\n")
+cat("Boosting Test Error:", test.error.gbm, "\n")
 ```
 
-Boosting outperformed both SVC (Linear Kernel) and SVM (Radial Kernel) models with the highest mean Kappa statistic (0.839) and mean Accuracy (0.920).
-However, the mean accuracy for the SVM Radial Kernel model (0.905) was higher than the SVC Linear Kernel mode (0.898). The Support Vector Machine with a radial kernel also outperformed the linear support vector classifier in the Kappa statistic suggesting that the radial model is more robust.
-These results indicate that the Support Vector Machine with a radial kernel provides a better predictive performance on the data than the linear support vector classifier but that boosting outperformed both.
+```{r} 
+# Overall test error Comparison
+cat("SVC Test Error:", round(test_err_lin, 4), "\n")
+cat("SVM Test Error:", round(test_err_rad, 4), "\n")
+cat("Boosting Test Error:", round(test.error.gbm, 4), "\n")
+```
+
+The Boosting model achieved the lowest test error rate (0.0598), likely because the algorithm could iteratively correct misclassifications that the SVM models could not. While the Radial SVM (0.0684) performed better than the Linear SVC (0.0855), Boosting provided the most robust predictive performance for the data.
 
 ---
 
@@ -194,6 +196,6 @@ plot(hc_scaled, main = "Hierarchical Clustering: Scaled Data (SD = 1)", xlab = "
 rect.hclust(hc_scaled, k = 3, border = "blue")
 ```
 
-Scaling the variables significantly changed the clustering results. The table shows that only 6 of the original 16 states in the unscaled clusters remained with 9 moving to cluster 2 and 1 moving to cluster 3. Out of the original 14 in the unscaled cluster 2, 2 were shifted to cluster 1 and 10 were shifted to cluster 3. The original states in cluster 3 all remained, indicating that it was the most stable of the three unscaled clusters. The scaled data yielded 8 states in cluster 1, 11 states in cluster 2 and 31 states in cluster 3. The dendrogram visualizes the scaled data clusters to highlight the differences. 
+Scaling the variables significantly changed the clustering results. The table shows that only 6 of the original 16 states in the unscaled clusters remained with 9 moving to cluster 2 and 1 moving to cluster 3. Out of the original 14 in the unscaled cluster 2, 2 were shifted to cluster 1 and 10 were shifted to cluster 3. The original states in cluster 3 all remained but 11 more moved into this cluster after scaling, indicating that it was the most stable of the three unscaled clusters. The scaled data yielded 8 states in cluster 1, 11 states in cluster 2 and 31 states in cluster 3. The dendrogram visualizes the scaled data clusters to highlight the differences. 
 
 In my opinion, the data should absolutely be scaled prior to inter-observation computation of dissimilarities because otherwise the variables on a small scale like murder (~10^1 scale) get largely ignored by the model as the variables on a larger scale like assault (~10^2 scale) over power the results. Scaling the data puts the clustering on an even field. 
