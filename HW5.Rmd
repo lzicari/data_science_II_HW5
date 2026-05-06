@@ -39,8 +39,10 @@ linear.tune <- tune.svm(mpg_cat ~ .,
                         data = training_data, 
                         kernel = "linear", 
                         cost = exp(seq(-5, 2, len = 50))) 
-
+plot(linear.tune)
 best.linear <- linear.tune$best.model 
+summary(best.linear)
+
 
 # Training Error Rate
 pred.train.lin <- predict(best.linear, newdata = training_data)
@@ -71,7 +73,12 @@ radial.tune <- tune.svm(mpg_cat ~ .,
                         cost = exp(seq(1, 7, len = 50)), 
                         gamma = exp(seq(-10, -2, len = 20))) 
 
+plot(radial.tune, transform.y = log, transform.x = log,
+color.palette = terrain.colors)
+
 best.radial <- radial.tune$best.model 
+summary(best.radial)
+
 
 # Training Error Rate
 pred.train.rad <- predict(best.radial, newdata = training_data)
@@ -91,12 +98,12 @@ Test Error = 0.0508
 
 ---
 
-### 1-c. Boosting & Comparison of SVC and SVM
+### 1-c. Boosting & Comparison with SVC and SVM
 
 ```{r}
 ctrl <- trainControl(method = "cv")
 
-# Linear SVM 
+# SVC (Linear Kernel)
 set.seed(2) 
 svml.fit <- train(mpg_cat ~ ., 
                   data = training_data, 
@@ -104,7 +111,7 @@ svml.fit <- train(mpg_cat ~ .,
                   tuneGrid = data.frame(cost = linear.tune$best.parameters$cost), 
                   trControl = ctrl) 
 
-# Radial SVM 
+# SVM (Radial Kernel)
 set.seed(2)
 svmr.fit <- train(mpg_cat ~ ., 
                   data = training_data, 
@@ -113,16 +120,26 @@ svmr.fit <- train(mpg_cat ~ .,
                                         sigma = radial.tune$best.parameters$gamma),
                   trControl = ctrl) 
 
+# Boosting
+set.seed(2)
+boost.fit <- train(mpg_cat ~ ., 
+                   data = training_data, 
+                   method = "gbm", 
+                   trControl = ctrl, 
+                   verbose = FALSE) 
+
 # Comparison
-resamp <- resamples(list(svml = svml.fit, 
-                         svmr = svmr.fit))
+resamp <- resamples(list(SVC = svml.fit, 
+                         SVM_radial = svmr.fit,
+                         Boosting = boost.fit))
+
 summary(resamp)
 bwplot(resamp)
 ```
 
-
-The mean accuaracy for svmr (0.905) was higher than svml (0.898). The Support Vector Machine with a radial kernal also outperformed the linear support vector classifier in the Kappa statistic suggesting that the radial model is more robust.
-These results inidicate that the Support Vector Machine with a radial kernal provides a better predictive performance on the data than the linear support vector cliassifer.
+Boosting outperformed both SVC (Linear Kernel) and SVM (Radial Kernel) models with the highest mean Kappa statistic (0.839) and mean Accuracy (0.920).
+However, the mean accuracy for the SVM Radial Kernel model (0.905) was higher than the SVC Linear Kernel mode (0.898). The Support Vector Machine with a radial kernel also outperformed the linear support vector classifier in the Kappa statistic suggesting that the radial model is more robust.
+These results indicate that the Support Vector Machine with a radial kernel provides a better predictive performance on the data than the linear support vector classifier but that boosting outperformed both.
 
 ---
 
@@ -179,4 +196,4 @@ rect.hclust(hc_scaled, k = 3, border = "blue")
 
 Scaling the variables significantly changed the clustering results. The table shows that only 6 of the original 16 states in the unscaled clusters remained with 9 moving to cluster 2 and 1 moving to cluster 3. Out of the original 14 in the unscaled cluster 2, 2 were shifted to cluster 1 and 10 were shifted to cluster 3. The original states in cluster 3 all remained, indicating that it was the most stable of the three unscaled clusters. The scaled data yielded 8 states in cluster 1, 11 states in cluster 2 and 31 states in cluster 3. The dendrogram visualizes the scaled data clusters to highlight the differences. 
 
-In my opinion, the variables should absolutely be scaled prior to inter-observation computation of dissimilarities because otherwise the variables on a small scale like murder (10^1 scale) get largely ignored by the model as the variables on a larger scale like assault (10^2 scale) over power the results. Scaling the data puts the clustering on an even field. 
+In my opinion, the data should absolutely be scaled prior to inter-observation computation of dissimilarities because otherwise the variables on a small scale like murder (~10^1 scale) get largely ignored by the model as the variables on a larger scale like assault (~10^2 scale) over power the results. Scaling the data puts the clustering on an even field. 
