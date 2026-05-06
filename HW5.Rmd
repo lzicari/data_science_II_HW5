@@ -1,0 +1,182 @@
+---
+title: "HW5"
+output: html_document
+date: "2026-05-06"
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(tidymodels)
+library(e1071)
+library(caret)
+library(ISLR)
+```
+
+---
+
+### Data setup
+```{r}
+auto = read_csv("auto.csv")
+auto <- na.omit(auto)
+
+auto$origin <- as.factor(auto$origin)
+auto$mpg_cat <- as.factor(auto$mpg_cat)
+
+set.seed(2) 
+
+data_split <- initial_split(auto, prop = 0.7)
+training_data <- training(data_split)
+testing_data <- testing(data_split)
+```
+
+---
+
+### 1-a. SVC (Linear Kernel)
+
+```{r}
+set.seed(2)
+linear.tune <- tune.svm(mpg_cat ~ ., 
+                        data = training_data, 
+                        kernel = "linear", 
+                        cost = exp(seq(-5, 2, len = 50))) 
+
+best.linear <- linear.tune$best.model 
+
+# Training Error Rate
+pred.train.lin <- predict(best.linear, newdata = training_data)
+train_err_lin <- mean(pred.train.lin != training_data$mpg_cat)
+
+# Test Error Rate
+pred.test.lin <- predict(best.linear, newdata = testing_data) 
+test_err_lin <- mean(pred.test.lin != testing_data$mpg_cat)
+
+# Results
+cat("SVC Training Error:", train_err_lin, "\n")
+cat("SVC Test Error:", test_err_lin, "\n")
+```
+
+Training Error = 0.0912
+Test Error = 0.0508
+
+---
+
+### 1-b. SVM (Radial Kernel)
+
+```{r}
+# Fit and tune SVM with Radial Kernel
+set.seed(2)
+radial.tune <- tune.svm(mpg_cat ~ ., 
+                        data = training_data, 
+                        kernel = "radial", 
+                        cost = exp(seq(1, 7, len = 50)), 
+                        gamma = exp(seq(-10, -2, len = 20))) 
+
+best.radial <- radial.tune$best.model 
+
+# Training Error Rate
+pred.train.rad <- predict(best.radial, newdata = training_data)
+train_err_rad <- mean(pred.train.rad != training_data$mpg_cat)
+
+# Test Error Rate
+pred.test.rad <- predict(best.radial, newdata = testing_data) 
+test_err_rad <- mean(pred.test.rad != testing_data$mpg_cat)
+
+# Results
+cat("SVM Training Error:", train_err_rad, "\n")
+cat("SVM Test Error:", test_err_rad, "\n")
+```
+
+Training Error = 0.0912
+Test Error = 0.0508
+
+---
+
+### 1-c. Boosting & Comparison of SVC and SVM
+
+```{r}
+ctrl <- trainControl(method = "cv")
+
+# Linear SVM 
+set.seed(2) 
+svml.fit <- train(mpg_cat ~ ., 
+                  data = training_data, 
+                  method = "svmLinear2", 
+                  tuneGrid = data.frame(cost = linear.tune$best.parameters$cost), 
+                  trControl = ctrl) 
+
+# Radial SVM 
+set.seed(2)
+svmr.fit <- train(mpg_cat ~ ., 
+                  data = training_data, 
+                  method = "svmRadial", 
+                  tuneGrid = data.frame(C = radial.tune$best.parameters$cost,
+                                        sigma = radial.tune$best.parameters$gamma),
+                  trControl = ctrl) 
+
+# Comparison
+resamp <- resamples(list(svml = svml.fit, 
+                         svmr = svmr.fit))
+summary(resamp)
+bwplot(resamp)
+```
+
+
+The mean accuaracy for svmr (0.905) was higher than svml (0.898). The Support Vector Machine with a radial kernal also outperformed the linear support vector classifier in the Kappa statistic suggesting that the radial model is more robust.
+These results inidicate that the Support Vector Machine with a radial kernal provides a better predictive performance on the data than the linear support vector cliassifer.
+
+---
+
+### 2-a. Hierarchical Clutering
+
+```{r}
+# Hierarchical Clustering with Complete Linkage
+states_data <- USArrests
+hc_complete <- hclust(dist(states_data), method = "complete")
+
+clusters <- cutree(hc_complete, k = 3)
+
+sort(clusters)
+table(clusters)
+
+# dendrogram
+plot(hc_complete, main = "Dendrogram of USArrests (Unscaled)", xlab = "States", sub = "")
+
+rect.hclust(hc_complete, k = 3, border = "red")
+```
+
+This dendrogram visuzalizes the states that make up each cluster. 16 states were in cluster 1, 14 in cluster 2 and 20 in cluster 3. 
+
+Cluster 1: Alabama, Alaska, Arizona, California, Delaware, Florida, Illinois, Louisiana, Maryland, Michigan, Mississippi, Nevada, New Mexico, New York, North Carolina, South Carolina.  
+
+
+Cluster 2: Arkansas, Colorado, Georgia, Massachusetts, Missouri, New Jersey, Oklahoma, Oregon, Rhode Island, Tennessee, Texas, Virginia, Washington, Wyoming.  
+
+
+Cluster 3: Connecticut, Hawaii, Idaho, Indiana, Iowa, Kansas, Kentucky, Maine, Minnesota, Montana, Nebraska, New Hampshire, North Dakota, Ohio, Pennsylvania, South Dakota, Utah, Vermont, West Virginia, Wisconsin.
+
+
+
+
+### 2-b. Scaling
+```{r}
+# Scaling (standard deviation = 1)
+states_scaled <- scale(USArrests)
+
+# Hierarchical clustering with complete linkage and Euclidean distance
+hc_scaled <- hclust(dist(states_scaled), method = "complete")
+
+clusters_scaled <- cutree(hc_scaled, k = 3)
+
+table(clusters_scaled)
+
+# Comparing
+table(Unscaled = clusters, Scaled = clusters_scaled)
+
+# Scaled data dendrogram
+plot(hc_scaled, main = "Hierarchical Clustering: Scaled Data (SD = 1)", xlab = "", sub = "") 
+rect.hclust(hc_scaled, k = 3, border = "blue")
+```
+
+Scaling the variables significantly changed the clustering results. The table shows that only 6 of the original 16 states in the unscaled clusters remained with 9 moving to cluster 2 and 1 moving to cluster 3. Out of the original 14 in the unscaled cluster 2, 2 were shifted to cluster 1 and 10 were shifted to cluster 3. The original states in cluster 3 all remained, indicating that it was the most stable of the three unscaled clusters. The scaled data yielded 8 states in cluster 1, 11 states in cluster 2 and 31 states in cluster 3. The dendrogram visualizes the scaled data clusters to highlight the differences. 
+
+In my opinion, the variables should absolutely be scaled prior to inter-observation computation of dissimilarities because otherwise the variables on a small scale like murder (10^1 scale) get largely ignored by the model as the variables on a larger scale like assault (10^2 scale) over power the results. Scaling the data puts the clustering on an even field. 
